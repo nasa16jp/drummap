@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DrumMap - AIドラム採譜アプリ | 曲からドラム譜を自動作成</title>
+<meta name="description" content="好きな曲を選ぶだけで、AIがドラムパートを自動採譜。五線譜と再生同期カーソルで、耳コピいらずのドラム練習を。3曲まで無料。">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif; color: #222; line-height: 1.8; }
+  .hero { background: #1C2B4B; color: #fff; text-align: center; padding: 64px 20px 56px; }
+  .hero img.icon { width: 112px; height: 112px; border-radius: 26px; box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+  .hero h1 { font-size: 40px; margin: 20px 0 4px; letter-spacing: 1px; }
+  .hero p.sub { font-size: 18px; opacity: 0.92; margin-bottom: 24px; }
+  .badges { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .badge { background: #E8603C; color: #fff; padding: 12px 22px; border-radius: 10px;
+           font-weight: bold; text-decoration: none; font-size: 15px; }
+  .badge.soon { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); font-weight: normal; }
+  section { max-width: 880px; margin: 0 auto; padding: 56px 20px; }
+  h2 { color: #1C2B4B; font-size: 26px; text-align: center; margin-bottom: 32px; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  .card { background: #FAF8F4; border-radius: 14px; padding: 22px; }
+  .card .em { font-size: 26px; }
+  .card h3 { color: #1C2B4B; font-size: 16px; margin: 8px 0 6px; }
+  .card p { font-size: 14px; color: #555; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; text-align: center; }
+  .step .num { width: 44px; height: 44px; border-radius: 50%; background: #E8603C; color: #fff;
+               display: flex; align-items: center; justify-content: center; font-weight: bold;
+               font-size: 20px; margin: 0 auto 10px; }
+  .shots { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .shot { width: 220px; height: 460px; background: #EDEAE2; border-radius: 24px; border: 1px solid #ddd;
+          display: flex; align-items: center; justify-content: center; color: #999; font-size: 13px; }
+  .shot img { width: 100%; height: 100%; object-fit: cover; border-radius: 24px; }
+  .pricing { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; max-width: 640px; margin: 0 auto; }
+  .plan { border: 2px solid #E2DED6; border-radius: 14px; padding: 26px; text-align: center; }
+  .plan.pro { border-color: #E8603C; position: relative; }
+  .plan.pro .tag { position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+                   background: #E8603C; color: #fff; font-size: 12px; padding: 3px 14px; border-radius: 12px; }
+  .plan h3 { color: #1C2B4B; margin-bottom: 8px; }
+  .plan .price { font-size: 30px; font-weight: bold; color: #1C2B4B; margin: 8px 0; }
+  .plan .price small { font-size: 14px; font-weight: normal; color: #777; }
+  .plan ul { list-style: none; font-size: 14px; color: #555; }
+  .plan li { padding: 4px 0; }
+  .notes { background: #FAF8F4; border-radius: 14px; padding: 22px; font-size: 13px; color: #666; }
+  footer { background: #1C2B4B; color: #C9CFDC; text-align: center; padding: 32px 20px; font-size: 13px; }
+  footer a { color: #fff; margin: 0 10px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <img class="icon" src="icon.png" alt="DrumMapアイコン">
+  <h1>DrumMap</h1>
+  <p class="sub">好きな曲から、AIがドラム譜を自動作成。</p>
+  <div class="badges">
+    <span class="badge soon">App Store — 近日公開</span>
+    <span class="badge soon">Google Play — 近日公開</span>
+  </div>
+</div>
+
+<section>
+  <h2>耳コピの時間を、練習の時間に。</h2>
+  <div class="features">
+    <div class="card"><div class="em">🤖</div><h3>AIが自動で採譜</h3>
+      <p>曲ファイルを選ぶだけ。AIがドラムパートを聴き取り、譜面に変換します。</p></div>
+    <div class="card"><div class="em">🎼</div><h3>日本式の五線譜</h3>
+      <p>バスドラは符幹下向きの見慣れた形式。グリッド譜との切り替えもワンタップ。</p></div>
+    <div class="card"><div class="em">🎯</div><h3>再生同期カーソル</h3>
+      <p>曲の再生に合わせて譜面上のカーソルが移動。いま叩く場所がひと目でわかります。</p></div>
+    <div class="card"><div class="em">🥁</div><h3>ドラムだけ再生</h3>
+      <p>AIが分離したドラムだけの音源で、細かいフレーズも聴き取れます。</p></div>
+    <div class="card"><div class="em">🎙️</div><h3>マイク録音対応</h3>
+      <p>流れている音楽をマイクで録音して、そのまま採譜できます。</p></div>
+    <div class="card"><div class="em">👆</div><h3>タップで自在に再生</h3>
+      <p>譜面の聞きたい場所をタップするとそこへジャンプ。10秒戻るボタンやカーソルの微調整も。</p></div>
+    <div class="card"><div class="em">📄</div><h3>楽譜PDF書き出し</h3>
+      <p>五線譜をそのままPDFに。印刷して譜面台に置いたり、仲間に共有できます。</p></div>
+    <div class="card"><div class="em">📤</div><h3>MIDI書き出し</h3>
+      <p>4/4拍子・テンポ情報つきのGM準拠MIDI。MuseScore等でそのまま美しいドラム譜になります。</p></div>
+  </div>
+</section>
+
+<section style="background:#FAF8F4; max-width:none;">
+  <div style="max-width:880px; margin:0 auto;">
+  <h2>使い方は3ステップ</h2>
+  <div class="steps">
+    <div class="step"><div class="num">1</div><h3>曲を選ぶ</h3><p>スマホ内の曲ファイルを選ぶか、マイクで録音</p></div>
+    <div class="step"><div class="num">2</div><h3>AIが採譜</h3><p>クラウドのAIが1〜3分でドラムパートを解析</p></div>
+    <div class="step"><div class="num">3</div><h3>譜面で練習</h3><p>再生と同期する譜面で、すぐに練習開始</p></div>
+  </div>
+  </div>
+</section>
+
+<section>
+  <h2>スクリーンショット</h2>
+  <div class="shots">
+    <div class="shot"><img src="shot1.jpg" alt="ホーム画面"></div>
+    <div class="shot"><img src="shot2.jpg" alt="五線譜と再生カーソル"></div>
+    <div class="shot"><img src="shot3.jpg" alt="グリッド譜"></div>
+  </div>
+</section>
+
+<section style="background:#FAF8F4; max-width:none;">
+  <div style="max-width:880px; margin:0 auto;">
+  <h2>料金</h2>
+  <div class="pricing">
+    <div class="plan">
+      <h3>無料</h3>
+      <div class="price">¥0</div>
+      <ul><li>3曲までお試し採譜</li><li>すべての表示機能</li><li>MIDI・PDF書き出し</li></ul>
+    </div>
+    <div class="plan pro">
+      <span class="tag">おすすめ</span>
+      <h3>プレミアム</h3>
+      <div class="price">¥680<small> /月</small></div>
+      <ul><li>採譜し放題(曲数無制限)</li><li>すべての表示機能</li><li>MIDI・PDF書き出し</li></ul>
+    </div>
+  </div>
+  <p style="text-align:center; font-size:12px; color:#888; margin-top:14px;">
+    サブスクリプションは自動更新です。App Store / Google Playの設定からいつでも解約できます。</p>
+  </div>
+</section>
+
+<section>
+  <div class="notes">
+    <p>・採譜はAIによる自動処理であり、結果の正確性を保証するものではありません。</p>
+    <p>・採譜にはインターネット接続が必要です。</p>
+    <p>・採譜結果はご自身の練習・学習など私的利用の範囲でご利用ください。</p>
+  </div>
+</section>
+
+<footer>
+  <p>
+    <a href="terms.html">利用規約</a> |
+    <a href="privacy.html">プライバシーポリシー</a> |
+    <a href="mailto:teppuu24@gmail.com">お問い合わせ</a>
+  </p>
+  <p style="margin-top:10px;">© 2026 DrumMap</p>
+</footer>
+
+</body>
+</html>
