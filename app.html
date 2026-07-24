@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DrumMap Web (ベータ)</title>
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+<style>
+  body { font-family: -apple-system, "Hiragino Sans", sans-serif; margin: 0; color: #222; }
+  header { background: #1C2B4B; color: #fff; padding: 14px 20px; display: flex;
+           align-items: center; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; }
+  .warn { background: #FCE8E3; color: #93331B; font-size: 12px; padding: 6px 20px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .panel { background: #FAF8F4; border-radius: 12px; padding: 14px 20px; margin-bottom: 14px; }
+  #player { position: sticky; top: 8px; z-index: 30;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12); background: #FAF8F4; }
+  button { background: #E8603C; color: #fff; border: none; border-radius: 8px;
+           padding: 10px 18px; font-size: 14px; cursor: pointer; }
+  button.gray { background: #5F6B85; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  select, input[type=range] { font-size: 14px; }
+  #status { font-size: 13px; color: #555; white-space: pre-wrap; }
+  #sheet { position: relative; }
+  #cursor { position: absolute; width: 3px; background: rgba(232,96,60,0.9);
+            display: none; z-index: 10; border-radius: 2px; }
+  .ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #glabels div { height: 44px; line-height: 44px; font-size: 12px; color: #1C2B4B;
+                 font-weight: 600; padding-left: 8px; }
+  #gscroll { overflow-x: auto; position: relative; flex: 1; }
+  #gph { position: absolute; top: 0; width: 3px; background: rgba(232,96,60,0.9);
+         display: none; border-radius: 2px; }
+  @media print {
+    header, .warn, .panel { display: none !important; }
+    #cursor, #gph { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<header><h1>DrumMap Web</h1><span style="font-size:12px;opacity:0.8">招待制ベータ</span></header>
+<div class="warn">招待制ベータ版です。ご利用にはアクセスキーが必要です。</div>
+<main>
+  <div class="panel ctl">
+    <input type="file" id="file" accept=".mp3,.wav,.m4a,.flac,.aac,audio/*">
+    <select id="dur">
+      <option value="30">30秒</option>
+      <option value="60">60秒</option>
+      <option value="90" selected>90秒</option>
+      <option value="0">曲全体</option>
+    </select>
+    <button id="go">採譜開始</button>
+    <button id="rec" class="gray">🎙 マイクで録音</button>
+    <span id="rectime" style="color:#E8603C;font-weight:bold"></span>
+  </div>
+  <div class="panel" id="statuspanel" style="display:none"><div id="status"></div></div>
+  <div class="panel ctl" id="player" style="display:none">
+    <button id="play">▶ 再生</button>
+    <button id="back10" class="gray">⏪ 10秒</button>
+    <label><input type="radio" name="view" value="sheet" checked> 五線譜</label>
+    <label><input type="radio" name="view" value="grid"> グリッド</label>
+    <span style="color:#ccc">|</span>
+    <label><input type="radio" name="src" value="full" checked> フル</label>
+    <label><input type="radio" name="src" value="drums"> ドラムのみ</label>
+    <label style="font-size:12px">微調整
+      <input type="range" id="off" min="-500" max="500" step="10" value="120">
+      <span id="offv">120ms</span></label>
+    <label style="font-size:12px">テンポ
+      <input type="range" id="rate" min="50" max="150" step="5" value="100">
+      <span id="ratev">100%</span></label>
+    <a id="dlmidi" download="drummap.mid"><button class="gray">MIDI</button></a>
+    <button class="gray" onclick="window.print()">🖨 印刷/PDF</button>
+  </div>
+  <div id="sheet"><div id="out"></div><div id="cursor"></div></div>
+  <div id="gridwrap" style="display:none">
+    <div style="display:flex">
+      <div id="glabels" style="width:56px;flex:none;padding-top:24px"></div>
+      <div id="gscroll">
+        <canvas id="gcanvas"></canvas>
+        <div id="gph"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+var API = 'https://teppuu24--drum-web-api.modal.run';
+var KEY = localStorage.dmKey || '';
+function ensureKey() {
+  if (!KEY) {
+    var k = prompt('アクセスキーを入力してください(招待制ベータ)');
+    if (k) { KEY = k.trim(); localStorage.dmKey = KEY; }
+  }
+  return !!KEY;
+}
+function badKey() {
+  KEY = '';
+  localStorage.removeItem('dmKey');
+  alert('アクセスキーが正しくありません');
+}
+var deviceId = localStorage.dmDevId ||
+  (localStorage.dmDevId = 'web-' + Math.random().toString(16).slice(2));
+
+var audio = new Audio();
+var fullUrl = null, drumsBlobUrl = null;
+var beats = [], bpm = 120, dur16 = 0.125, curNotes = null;
+var nsxs = [], anchorsAll = [], nMeasures = 0, mW = 0, x0 = 8, y0 = 10, rowH = 150;
+var viewMode = 'sheet';
+var kColW = 26, kLaneH = 44, gTop = 24;
+var LANES = [
+  { label: 'Crash', pitches: [49] },
+  { label: 'HiHat', pitches: [42, 46] },
+  { label: 'Tom', pitches: [45, 47, 48, 50] },
+  { label: 'Snare', pitches: [38, 40] },
+  { label: 'Kick', pitches: [35, 36] }
+];
+var offset = 0.12;
+var offSlider = document.getElementById('off'), offV = document.getElementById('offv');
+offSlider.value = localStorage.dmOff || 120;
+offset = offSlider.value / 1000;
+offV.textContent = offSlider.value + 'ms';
+offSlider.oninput = function () {
+  offset = this.value / 1000; offV.textContent = this.value + 'ms';
+  localStorage.dmOff = this.value;
+};
+
+var rateSlider = document.getElementById('rate'), rateV = document.getElementById('ratev');
+function applyRate() {
+  var r = rateSlider.value / 100;
+  audio.playbackRate = r;
+  try { audio.preservesPitch = true; } catch (e) {}
+  rateV.textContent = rateSlider.value + '% (\u266a=' + Math.round(bpm * r) + ')';
+}
+rateSlider.oninput = applyRate;
+
+function setStatus(msg) {
+  document.getElementById('statuspanel').style.display = 'block';
+  document.getElementById('status').textContent = msg;
+}
+
+document.getElementById('go').onclick = function () {
+  if (!ensureKey()) return;
+  var f = document.getElementById('file').files[0];
+  if (!f) { alert('曲ファイルを選んでください'); return; }
+  fullUrl = URL.createObjectURL(f);
+  submit(f, f.name);
+};
+
+function submit(blob, name) {
+  var fd = new FormData();
+  fd.append('file', blob, name);
+  fd.append('duration', document.getElementById('dur').value);
+  fd.append('device_id', deviceId);
+  fd.append('premium', '1');
+  setStatus('アップロード中...');
+  document.getElementById('go').disabled = true;
+  fetch(API + '/submit', { method: 'POST', headers: { 'x-api-key': KEY }, body: fd })
+    .then(function (r) { if (r.status === 401) { badKey(); throw new Error('アクセスキー無効'); } return r.json(); })
+    .then(function (j) {
+      if (!j.job_id) throw new Error(JSON.stringify(j));
+      var sec = 0;
+      var iv = setInterval(function () {
+        sec += 5;
+        fetch(API + '/status?job_id=' + j.job_id, { headers: { 'x-api-key': KEY } })
+          .then(function (r) { return r.json(); })
+          .then(function (s) {
+            if (s.status === 'running') { setStatus('クラウドで採譜中... ' + sec + '秒'); return; }
+            clearInterval(iv);
+            document.getElementById('go').disabled = false;
+            if (s.status !== 'done') { setStatus('エラー: ' + (s.detail || '')); return; }
+            setStatus('完了! BPM ' + s.bpm.toFixed(1));
+            onDone(s, j.job_id);
+          });
+      }, 5000);
+    })
+    .catch(function (e) {
+      setStatus('送信エラー: ' + e.message);
+      document.getElementById('go').disabled = false;
+    });
+}
+
+function onDone(s, jobId) {
+  beats = s.beats || []; bpm = s.bpm; dur16 = 60 / bpm / 4;
+  curNotes = s.notes || [];
+  document.getElementById('dlmidi').href = 'data:audio/midi;base64,' + s.midi_b64;
+  document.getElementById('player').style.display = 'flex';
+  renderSheet(curNotes);
+  renderGrid(curNotes);
+  applyView();
+  fetch(API + '/drums?job_id=' + jobId, { headers: { 'x-api-key': KEY } })
+    .then(function (r) { return r.ok ? r.blob() : null; })
+    .then(function (b) { if (b) drumsBlobUrl = URL.createObjectURL(b); });
+  audio.src = fullUrl;
+  applyRate();
+}
+
+// ---- マイク録音 (音楽用: ノイズ抑制・エコー除去・自動音量をすべてOFF) ----
+var mediaRec = null, chunks = [], recIv = null;
+document.getElementById('rec').onclick = function () {
+  if (!ensureKey()) return;
+  var btn = this;
+  if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); return; }
+  navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 1
+    }
+  }).then(function (stream) {
+    chunks = [];
+    mediaRec = new MediaRecorder(stream, { audioBitsPerSecond: 192000 });
+    mediaRec.ondataavailable = function (e) { chunks.push(e.data); };
+    mediaRec.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      clearInterval(recIv);
+      document.getElementById('rectime').textContent = '';
+      btn.textContent = '🎙 マイクで録音';
+      var blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
+      fullUrl = URL.createObjectURL(blob);
+      submit(blob, 'rec.webm');
+    };
+    mediaRec.start();
+    var sec = 0;
+    recIv = setInterval(function () {
+      sec++;
+      document.getElementById('rectime').textContent = '録音中 ' + sec + '秒';
+    }, 1000);
+    btn.textContent = '⏹ 停止して採譜';
+  }).catch(function () { alert('マイクを使用できません(ブラウザの許可を確認)'); });
+};
+
+// ---- 再生・表示切替 ----
+document.getElementById('play').onclick = function () {
+  if (!audio.src) return;
+  if (audio.paused) { audio.play(); this.textContent = '⏸ 一時停止'; }
+  else { audio.pause(); this.textContent = '▶ 再生'; }
+};
+document.getElementById('back10').onclick = function () {
+  audio.currentTime = Math.max(0, audio.currentTime - 10);
+};
+document.querySelectorAll('input[name=src]').forEach(function (r) {
+  r.onchange = function () {
+    var t = audio.currentTime, wasPlaying = !audio.paused;
+    var url = (this.value === 'drums') ? drumsBlobUrl : fullUrl;
+    if (!url) { alert('ドラム音源はまだ準備中です'); return; }
+    audio.src = url; audio.currentTime = t; applyRate();
+    if (wasPlaying) audio.play();
+  };
+});
+document.querySelectorAll('input[name=view]').forEach(function (r) {
+  r.onchange = function () { viewMode = this.value; applyView(); };
+});
+function applyView() {
+  document.getElementById('sheet').style.display =
+    viewMode === 'sheet' ? 'block' : 'none';
+  document.getElementById('gridwrap').style.display =
+    viewMode === 'grid' ? 'block' : 'none';
+}
+function loop() {
+  requestAnimationFrame(loop);
+  if (!audio.src || !curNotes) return;
+  var t = (audio.paused && audio.currentTime === 0) ? -1 : audio.currentTime + offset;
+  if (viewMode === 'sheet') setPlayhead(t); else setGridPlayhead(t);
+}
+loop();
+
+// ---- 拍変換 ----
+function slotFOf(t) {
+  if (!beats || beats.length < 2) return t / dur16;
+  if (t <= beats[0]) {
+    var ibi0 = beats[1] - beats[0];
+    var v = (t - beats[0]) / ibi0 * 4;
+    return v < -0.49 ? v : Math.max(v, -0.49);
+  }
+  var lo = 0, hi = beats.length - 1;
+  while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (beats[mid] <= t) lo = mid; else hi = mid - 1; }
+  var next = (lo + 1 < beats.length) ? beats[lo + 1] : beats[lo] + (beats[lo] - beats[lo - 1]);
+  return lo * 4 + (t - beats[lo]) / (next - beats[lo]) * 4;
+}
+function timeOfSlotF(slotF) {
+  if (!beats || beats.length < 2) return slotF * dur16;
+  var bi = slotF / 4, b0 = Math.floor(bi);
+  if (b0 < 0) return beats[0];
+  if (b0 >= beats.length - 1) {
+    var ibiL = beats[beats.length - 1] - beats[beats.length - 2];
+    return beats[beats.length - 1] + (bi - (beats.length - 1)) * ibiL;
+  }
+  return beats[b0] + (bi - b0) * (beats[b0 + 1] - beats[b0]);
+}
+function mapKey(p) {
+  var o;
+  if (p === 35 || p === 36) o = { key: 'f/4' };
+  else if (p === 38 || p === 40) o = { key: 'c/5' };
+  else if (p === 42) o = { key: 'g/5/x2' };
+  else if (p === 46) o = { key: 'g/5/x2', open: true };
+  else if (p === 49) o = { key: 'a/5/x2' };
+  else o = { key: 'e/5' };
+  o.pitch = p; return o;
+}
+
+// ---- 五線譜描画 ----
+function renderSheet(notes) {
+  var VF = Vex.Flow;
+  document.getElementById('out').innerHTML = '';
+  var slots = {}, maxSlot = 0;
+  for (var i = 0; i < notes.length; i++) {
+    var s = Math.round(slotFOf(notes[i][0]));
+    if (s < 0) s = 0;
+    if (s > maxSlot) maxSlot = s;
+    if (!slots[s]) slots[s] = [];
+    slots[s].push(mapKey(notes[i][1]));
+  }
+  nMeasures = Math.floor(maxSlot / 16) + 1;
+  if (nMeasures > 200) nMeasures = 200;
+  mW = Math.min(1000, Math.max(300, Math.min(window.innerWidth, 1100) - 60));
+  var div = document.getElementById('out');
+  var renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
+  renderer.resize(x0 + mW + 16, y0 + nMeasures * rowH + 30);
+  var ctx = renderer.getContext();
+  var isKick = function (p) { return p === 35 || p === 36; };
+  function buildBeat(m, b, wantKick, stemDir, restKey, anchors) {
+    var out = [], local = [];
+    for (var j = 0; j < 4; j++) {
+      var hits = slots[m * 16 + b * 4 + j] || null;
+      if (hits) {
+        var f = [];
+        for (var h0 = 0; h0 < hits.length; h0++) {
+          if (isKick(hits[h0].pitch) === wantKick) f.push(hits[h0]);
+        }
+        local.push(f.length ? f : null);
+      } else local.push(null);
+    }
+    var pos = 0;
+    while (pos < 4) {
+      var next = 4;
+      for (var j2 = pos + 1; j2 < 4; j2++) { if (local[j2]) { next = j2; break; } }
+      var len = next - pos;
+      if (local[pos]) {
+        var seen = {}, keys = [], open = false;
+        for (var h = 0; h < local[pos].length; h++) {
+          var k = local[pos][h].key;
+          if (!seen[k]) { seen[k] = 1; keys.push(k); }
+          if (local[pos][h].open) open = true;
+        }
+        var dur = (len === 1) ? '16' : (len === 2) ? '8' : (len === 3) ? '8d' : 'q';
+        var sn = new VF.StaveNote({ keys: keys, duration: dur, stem_direction: stemDir });
+        if (len === 3) VF.Dot.buildAndAttach([sn], { all: true });
+        if (open) sn.addModifier(new VF.Annotation('o')
+          .setVerticalJustification(VF.Annotation.VerticalJustify.TOP), 0);
+        out.push(sn);
+        if (anchors) anchors.push({ s: b * 4 + pos, note: sn });
+        pos += len;
+      } else {
+        if (len === 4) { out.push(new VF.StaveNote({ keys: [restKey], duration: 'qr' })); pos += 4; }
+        else if (len >= 2) { out.push(new VF.StaveNote({ keys: [restKey], duration: '8r' })); pos += 2; }
+        else { out.push(new VF.StaveNote({ keys: [restKey], duration: '16r' })); pos += 1; }
+      }
+    }
+    return out;
+  }
+  nsxs = []; anchorsAll = [];
+  for (var m = 0; m < nMeasures; m++) {
+    var y = y0 + m * rowH;
+    var stave = new VF.Stave(x0, y, mW);
+    stave.addClef('percussion');
+    if (m === 0) stave.addTimeSignature('4/4');
+    stave.setMeasure(m + 1);
+    stave.setContext(ctx).draw();
+    nsxs.push(stave.getNoteStartX());
+    var upper = [], lower = [], anchors = [];
+    for (var b = 0; b < 4; b++) {
+      var ub = buildBeat(m, b, false, 1, 'b/4', anchors);
+      var lb = buildBeat(m, b, true, -1, 'd/4', anchors);
+      for (var q = 0; q < ub.length; q++) upper.push(ub[q]);
+      for (var q2 = 0; q2 < lb.length; q2++) lower.push(lb[q2]);
+    }
+    var v1 = new VF.Voice({ num_beats: 4, beat_value: 4 }).setStrict(false).addTickables(upper);
+    var v2 = new VF.Voice({ num_beats: 4, beat_value: 4 }).setStrict(false).addTickables(lower);
+    var beamsUp = VF.Beam.generateBeams(upper, { stem_direction: 1 });
+    var beamsDown = VF.Beam.generateBeams(lower, { stem_direction: -1 });
+    new VF.Formatter().joinVoices([v1, v2]).formatToStave([v1, v2], stave, { align_rests: false });
+    v1.draw(ctx, stave); v2.draw(ctx, stave);
+    for (var bi = 0; bi < beamsUp.length; bi++) beamsUp[bi].setContext(ctx).draw();
+    for (var bj = 0; bj < beamsDown.length; bj++) beamsDown[bj].setContext(ctx).draw();
+    anchors.sort(function (a, b) { return a.s - b.s; });
+    var pts = [];
+    for (var ai = 0; ai < anchors.length; ai++) {
+      var xx;
+      try { xx = anchors[ai].note.getAbsoluteX(); } catch (e2) { continue; }
+      if (pts.length && pts[pts.length - 1].s === anchors[ai].s) continue;
+      pts.push({ s: anchors[ai].s, x: xx });
+    }
+    anchorsAll.push(pts);
+  }
+}
+window.__lastM = -1;
+function routeOf(m) {
+  var startX = nsxs[m] || (x0 + 60);
+  var endX = x0 + mW - 3;
+  var route = [{ s: 0, x: startX }];
+  var pts = anchorsAll[m] || [];
+  for (var pi = 0; pi < pts.length; pi++) {
+    if (pts[pi].s <= 0) route[0] = { s: 0, x: pts[pi].x };
+    else route.push(pts[pi]);
+  }
+  route.push({ s: 16, x: endX });
+  return route;
+}
+function setPlayhead(t) {
+  var c = document.getElementById('cursor');
+  if (t < 0 || !nMeasures) { c.style.display = 'none'; window.__lastM = -1; return; }
+  var slotF = slotFOf(t);
+  if (slotF < 0) slotF = 0;
+  var m = Math.floor(slotF / 16);
+  if (m >= nMeasures) { c.style.display = 'none'; return; }
+  var f = slotF - m * 16; if (f < 0) f = 0;
+  var route = routeOf(m), left = route[route.length - 1].x;
+  for (var ri = 0; ri < route.length - 1; ri++) {
+    if (f >= route[ri].s && f <= route[ri + 1].s) {
+      var span = route[ri + 1].s - route[ri].s || 1;
+      left = route[ri].x + (f - route[ri].s) / span * (route[ri + 1].x - route[ri].x);
+      break;
+    }
+  }
+  // #cursorは#sheet基準の絶対配置なので、そのままの座標を使う
+  var topLocal = y0 + m * rowH + 15;
+  c.style.display = 'block';
+  c.style.left = left + 'px';
+  c.style.top = topLocal + 'px';
+  c.style.height = '85px';
+  if (m !== window.__lastM) {
+    window.__lastM = m;
+    var sheet = document.getElementById('sheet');
+    var absTop = sheet.getBoundingClientRect().top + window.scrollY + topLocal;
+    window.scrollTo({ top: Math.max(0, absTop - 220), behavior: 'smooth' });
+  }
+}
+document.getElementById('sheet').addEventListener('click', function (ev) {
+  if (!nMeasures || !audio.src) return;
+  var rect = this.getBoundingClientRect();
+  var xx = ev.clientX - rect.left, yy = ev.clientY - rect.top;
+  var m = Math.floor((yy - y0) / rowH);
+  if (m < 0 || m >= nMeasures) return;
+  var route = routeOf(m), f = 0;
+  var endX = route[route.length - 1].x;
+  if (xx >= endX) f = 16;
+  else if (xx > route[0].x) {
+    for (var ri = 0; ri < route.length - 1; ri++) {
+      if (xx >= route[ri].x && xx <= route[ri + 1].x) {
+        var spanX = route[ri + 1].x - route[ri].x || 1;
+        f = route[ri].s + (xx - route[ri].x) / spanX * (route[ri + 1].s - route[ri].s);
+        break;
+      }
+    }
+  }
+  audio.currentTime = Math.max(0, timeOfSlotF(m * 16 + f) - offset);
+  if (audio.paused) { audio.play(); document.getElementById('play').textContent = '⏸ 一時停止'; }
+});
+
+// ---- グリッド描画 (スマホ版と同じレーン構成) ----
+function laneOf(p) {
+  for (var i = 0; i < LANES.length; i++) {
+    if (LANES[i].pitches.indexOf(p) >= 0) return i;
+  }
+  return null;
+}
+function renderGrid(notes) {
+  var labels = document.getElementById('glabels');
+  labels.innerHTML = '';
+  LANES.forEach(function (l) {
+    var d = document.createElement('div');
+    d.textContent = l.label;
+    labels.appendChild(d);
+  });
+  var maxT = 0;
+  notes.forEach(function (n) { if (n[0] > maxT) maxT = n[0]; });
+  var cols = Math.ceil(maxT / dur16) + 8;
+  var w = cols * kColW, h = gTop + LANES.length * kLaneH + 16;
+  var canvas = document.getElementById('gcanvas');
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  var g = canvas.getContext('2d');
+  g.scale(dpr, dpr);
+  g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, w, h);
+  var bottom = gTop + LANES.length * kLaneH;
+  for (var i = 0; i <= LANES.length; i++) {
+    g.strokeStyle = '#E7E3DA'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, gTop + i * kLaneH); g.lineTo(w, gTop + i * kLaneH); g.stroke();
+  }
+  for (var c = 0; c <= cols; c++) {
+    var x = c * kColW;
+    g.strokeStyle = c % 16 === 0 ? '#9B968A' : (c % 4 === 0 ? '#CCC7BB' : '#E7E3DA');
+    g.lineWidth = c % 16 === 0 ? 2 : 1;
+    g.beginPath(); g.moveTo(x, gTop); g.lineTo(x, bottom); g.stroke();
+    if (c % 16 === 0) {
+      g.fillStyle = '#8A867E'; g.font = '11px sans-serif';
+      g.fillText(String(c / 16 + 1), x + 3, 14);
+    }
+  }
+  notes.forEach(function (n) {
+    var lane = laneOf(n[1]);
+    if (lane === null) return;
+    var cx = Math.round(n[0] / dur16) * kColW + kColW / 2;
+    var cy = gTop + lane * kLaneH + kLaneH / 2;
+    var vel = n.length > 2 ? n[2] : 100;
+    var r = 5 + 4 * (vel / 127);
+    var alpha = 0.45 + 0.55 * (vel / 127);
+    g.beginPath();
+    g.arc(cx, cy, r, 0, Math.PI * 2);
+    if (n[1] === 46) {
+      g.strokeStyle = 'rgba(28,43,75,' + alpha + ')'; g.lineWidth = 2.5; g.stroke();
+    } else {
+      g.fillStyle = 'rgba(28,43,75,' + alpha + ')'; g.fill();
+    }
+  });
+  document.getElementById('gph').style.height = h + 'px';
+}
+function setGridPlayhead(t) {
+  var ph = document.getElementById('gph');
+  if (t < 0) { ph.style.display = 'none'; return; }
+  var x = (t / dur16) * kColW;
+  ph.style.display = 'block';
+  ph.style.left = x + 'px';
+  if (!audio.paused) {
+    var sc = document.getElementById('gscroll');
+    sc.scrollLeft = Math.max(0, x - sc.clientWidth * 0.35);
+  }
+}
+document.getElementById('gcanvas').addEventListener('click', function (ev) {
+  if (!audio.src) return;
+  var rect = this.getBoundingClientRect();
+  var xx = ev.clientX - rect.left;
+  audio.currentTime = Math.max(0, (xx / kColW) * dur16 - offset);
+  if (audio.paused) { audio.play(); document.getElementById('play').textContent = '⏸ 一時停止'; }
+});
+</script>
+</body>
+</html>
