@@ -48,6 +48,11 @@
       <option value="90" selected>90秒</option>
       <option value="0">曲全体</option>
     </select>
+    <select id="sens">
+      <option value="0.25">感度:高め</option>
+      <option value="0.35" selected>感度:ふつう</option>
+      <option value="0.5">感度:低め</option>
+    </select>
     <button id="go">採譜開始</button>
     <button id="rec" class="gray">🎙 マイクで録音</button>
     <span id="rectime" style="color:#E8603C;font-weight:bold"></span>
@@ -154,6 +159,7 @@ function submit(blob, name) {
   var fd = new FormData();
   fd.append('file', blob, name);
   fd.append('duration', document.getElementById('dur').value);
+  fd.append('sensitivity', document.getElementById('sens').value);
   fd.append('device_id', deviceId);
   fd.append('premium', KEY ? '1' : '0');
   setStatus('アップロード中...');
