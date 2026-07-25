@@ -37,8 +37,8 @@
 </style>
 </head>
 <body>
-<header><h1>DrumMap Web</h1><span style="font-size:12px;opacity:0.8">招待制ベータ</span></header>
-<div class="warn">招待制ベータ版です。ご利用にはアクセスキーが必要です。</div>
+<header><h1>DrumMap Web</h1><span style="font-size:12px;opacity:0.8">無料ベータ</span></header>
+<div class="warn">どなたでも3曲まで無料でお試しいただけます(ベータ版)。</div>
 <main>
   <div class="panel ctl">
     <input type="file" id="file" accept=".mp3,.wav,.m4a,.flac,.aac,audio/*">
@@ -51,6 +51,7 @@
     <button id="go">採譜開始</button>
     <button id="rec" class="gray">🎙 マイクで録音</button>
     <span id="rectime" style="color:#E8603C;font-weight:bold"></span>
+    <button id="keybtn" class="gray" style="font-size:12px;padding:8px 12px">キー入力</button>
   </div>
   <div class="panel" id="statuspanel" style="display:none"><div id="status"></div></div>
   <div class="panel ctl" id="player" style="display:none">
@@ -91,6 +92,12 @@ function ensureKey() {
   }
   return !!KEY;
 }
+document.addEventListener('DOMContentLoaded', function () {
+  document.getElementById('keybtn').onclick = function () {
+    var k = prompt('アクセスキーを入力してください');
+    if (k) { KEY = k.trim(); localStorage.dmKey = KEY; alert('キーを保存しました(無制限で利用できます)'); }
+  };
+});
 function badKey() {
   KEY = '';
   localStorage.removeItem('dmKey');
@@ -137,7 +144,6 @@ function setStatus(msg) {
 }
 
 document.getElementById('go').onclick = function () {
-  if (!ensureKey()) return;
   var f = document.getElementById('file').files[0];
   if (!f) { alert('曲ファイルを選んでください'); return; }
   fullUrl = URL.createObjectURL(f);
@@ -149,12 +155,22 @@ function submit(blob, name) {
   fd.append('file', blob, name);
   fd.append('duration', document.getElementById('dur').value);
   fd.append('device_id', deviceId);
-  fd.append('premium', '1');
+  fd.append('premium', KEY ? '1' : '0');
   setStatus('アップロード中...');
   document.getElementById('go').disabled = true;
   fetch(API + '/submit', { method: 'POST', headers: { 'x-api-key': KEY }, body: fd })
     .then(function (r) { if (r.status === 401) { badKey(); throw new Error('アクセスキー無効'); } return r.json(); })
     .then(function (j) {
+      if (j.error === 'free_limit') {
+        setStatus('無料お試し(3曲)を使い切りました。ありがとうございます!\nアプリ版(App Store / Google Play・近日公開)で引き続きお楽しみください。\nアクセスキーをお持ちの方は「キー入力」からどうぞ。');
+        document.getElementById('go').disabled = false;
+        return;
+      }
+      if (j.error === 'rate_limit') {
+        setStatus('本日の利用上限に達しました。また明日お試しください。');
+        document.getElementById('go').disabled = false;
+        return;
+      }
       if (!j.job_id) throw new Error(JSON.stringify(j));
       var sec = 0;
       var iv = setInterval(function () {
@@ -195,7 +211,6 @@ function onDone(s, jobId) {
 // ---- マイク録音 (音楽用: ノイズ抑制・エコー除去・自動音量をすべてOFF) ----
 var mediaRec = null, chunks = [], recIv = null;
 document.getElementById('rec').onclick = function () {
-  if (!ensureKey()) return;
   var btn = this;
   if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); return; }
   navigator.mediaDevices.getUserMedia({
