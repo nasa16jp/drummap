@@ -53,6 +53,7 @@
   <h1>DrumMap</h1>
   <p class="sub">好きな曲から、AIがドラム譜を自動作成。</p>
   <div class="badges">
+    <a class="badge" href="app.html">無料で3曲試す →</a>
     <span class="badge soon">App Store — 近日公開</span>
     <span class="badge soon">Google Play — 近日公開</span>
   </div>
@@ -107,17 +108,17 @@
     <div class="plan">
       <h3>無料</h3>
       <div class="price">¥0</div>
-      <ul><li>3曲までお試し採譜</li><li>すべての表示機能</li><li>MIDI・PDF書き出し</li></ul>
+      <ul><li>月3曲までAI採譜</li><li>五線譜・グリッド譜の表示</li><li>再生同期カーソル・テンポ練習</li><li>履歴保存 3曲まで</li></ul>
     </div>
     <div class="plan pro">
       <span class="tag">おすすめ</span>
       <h3>プレミアム</h3>
       <div class="price">¥680<small> /月</small></div>
-      <ul><li>採譜し放題(曲数無制限)</li><li>すべての表示機能</li><li>MIDI・PDF書き出し</li></ul>
+      <ul><li>AI採譜 使い放題</li><li>PDF楽譜の書き出し・印刷</li><li>MIDI書き出し(MuseScore対応)</li><li>履歴保存 100曲まで</li><li>新機能をいち早く(練習ノートなど)</li></ul>
     </div>
   </div>
   <p style="text-align:center; font-size:12px; color:#888; margin-top:14px;">
-    サブスクリプションは自動更新です。App Store / Google Playの設定からいつでも解約できます。</p>
+    サブスクリプションは自動更新です。App Store / Google Playの設定からいつでも解約できます。解約後も無料プランでご利用いただけます。</p>
   </div>
 </section>
 
@@ -128,6 +129,60 @@
     <p>・採譜結果はご自身の練習・学習など私的利用の範囲でご利用ください。</p>
   </div>
 </section>
+
+<section id="notify">
+  <h2>リリース通知・アップデート情報を受け取る</h2>
+  <div style="max-width:520px; margin:0 auto; text-align:center;">
+    <p style="font-size:14px; color:#555; margin-bottom:16px;">新機能・精度改善・アプリ公開のお知らせをメールでお届けします。いつでも解除できます。</p>
+    <form id="nlform">
+      <input type="email" id="nlemail" required placeholder="メールアドレス"
+             style="width:100%; padding:12px 14px; font-size:15px; border:1px solid #ccc; border-radius:10px; box-sizing:border-box;">
+      <label style="display:block; font-size:13px; color:#555; margin:12px 0;">
+        <input type="checkbox" id="nlconsent"> お知らせメールの受け取りに同意します
+      </label>
+      <button type="submit" id="nlbtn" disabled
+              style="background:#E8603C; color:#fff; border:none; border-radius:10px; padding:12px 28px; font-size:15px; font-weight:bold; cursor:pointer; opacity:0.5;">登録する</button>
+    </form>
+    <p id="nlmsg" style="font-size:13px; color:#1C2B4B; margin-top:12px;"></p>
+  </div>
+</section>
+<script>
+var SUPABASE_URL = '';
+var SUPABASE_ANON = '';
+(function () {
+  var f = document.getElementById('nlform');
+  var c = document.getElementById('nlconsent');
+  var b = document.getElementById('nlbtn');
+  var m = document.getElementById('nlmsg');
+  c.onchange = function () {
+    b.disabled = !c.checked;
+    b.style.opacity = c.checked ? '1' : '0.5';
+  };
+  f.onsubmit = function (e) {
+    e.preventDefault();
+    if (!SUPABASE_URL) { m.textContent = 'ただいま準備中です。もうしばらくお待ちください。'; return; }
+    var email = document.getElementById('nlemail').value.trim();
+    b.disabled = true;
+    fetch(SUPABASE_URL + '/rest/v1/newsletter_subscribers', {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON,
+                 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, source: 'site' })
+    }).then(function (r) {
+      if (r.ok || r.status === 409) {
+        m.textContent = '登録しました。お知らせをお待ちください!';
+        f.reset();
+      } else {
+        m.textContent = '登録に失敗しました。時間をおいてお試しください。';
+      }
+      b.disabled = true; b.style.opacity = '0.5';
+    }).catch(function () {
+      m.textContent = '通信に失敗しました。環境をご確認ください。';
+      b.disabled = false;
+    });
+  };
+})();
+</script>
 
 <footer>
   <p>
